@@ -307,6 +307,114 @@ with col_right:
                 {count:,} transactions ({pct:.1f}%)
             </div>""", unsafe_allow_html=True)
 
+# ── Prediction form ────────────────────────────────────────────
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("## 🔎 Test a transaction")
+st.markdown("Enter the characteristics of a property to check if its price is suspicious.")
+
+try:
+    import joblib
+
+    km_loaded    = joblib.load("kmeans_model.pkl")
+    scaler_loaded = joblib.load("scaler.pkl")
+    reg_loaded   = joblib.load("regression_model.pkl")
+    stats_loaded = pd.read_csv("stats_cluster.csv")
+
+    col_f1, col_f2, col_f3 = st.columns(3)
+
+    with col_f1:
+        surface = st.number_input("Surface area (m²)", min_value=5, max_value=500, value=50)
+        n_pieces = st.number_input("Number of rooms", min_value=1, max_value=15, value=2)
+
+    with col_f2:
+        prix_input = st.number_input("Transaction price (€)", min_value=10000, max_value=20000000, value=400000, step=10000)
+        revenu = st.number_input("Avg household income of arrondissement (€)", min_value=10000, max_value=200000, value=50000, step=1000)
+
+    with col_f3:
+        taux = st.number_input("Interest rate (%)", min_value=0.5, max_value=6.0, value=3.5, step=0.1)
+        emprunts = st.number_input("New mortgage loans (M€)", min_value=1000, max_value=30000, value=12000, step=500)
+
+    if st.button("🔍 Analyse this transaction", use_container_width=True):
+
+        prix_m2_input = prix_input / surface
+
+        # Assign cluster
+        features_cluster = np.array([[surface, n_pieces, revenu, revenu * 0.18]])
+        features_scaled = scaler_loaded.transform(features_cluster)
+        cluster_pred = km_loaded.predict(features_scaled)[0]
+
+        # Get cluster stats
+        cluster_row = stats_loaded[stats_loaded['cluster'] == cluster_pred].iloc[0]
+        mean_m2 = cluster_row['mean_m2']
+        std_m2  = cluster_row['std_m2']
+        lower   = mean_m2 - 2 * std_m2
+        upper   = mean_m2 + 2 * std_m2
+
+        # Statistical flag
+        if prix_m2_input > upper:
+            stat_flag = "🔴 Overpriced"
+            stat_color = "#c0392b"
+        elif prix_m2_input < lower:
+            stat_flag = "🟢 Underpriced"
+            stat_color = "#27ae60"
+        else:
+            stat_flag = "✅ Normal"
+            stat_color = "#2e75b6"
+
+        # Regression prediction
+        features_reg = np.array([[surface, n_pieces, cluster_pred, revenu, taux, emprunts]])
+        prix_predit = reg_loaded.predict(features_reg)[0]
+        residu = abs(prix_input - prix_predit)
+        seuil_residu = 483495
+        macro_flag = residu > seuil_residu
+
+        # Final verdict
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_r1, col_r2, col_r3 = st.columns(3)
+
+        with col_r1:
+            st.markdown(f"""
+            <div style='background:#1a3c5e; padding:16px; border-radius:12px; border-left: 4px solid {stat_color};'>
+                <b style='color:#a8d4f5;'>Statistical analysis</b><br>
+                <span style='font-size:1.4rem; color:white;'>{stat_flag}</span><br>
+                <span style='color:#ccc; font-size:0.85rem;'>
+                Price/m²: {prix_m2_input:,.0f}€<br>
+                Cluster mean: {mean_m2:,.0f}€/m²<br>
+                Normal range: {lower:,.0f} – {upper:,.0f}€/m²
+                </span>
+            </div>""", unsafe_allow_html=True)
+
+        with col_r2:
+            macro_color = "#c0392b" if macro_flag else "#27ae60"
+            macro_label = "🔴 Suspicious" if macro_flag else "✅ Normal"
+            st.markdown(f"""
+            <div style='background:#1a3c5e; padding:16px; border-radius:12px; border-left: 4px solid {macro_color};'>
+                <b style='color:#a8d4f5;'>Macro-economic analysis</b><br>
+                <span style='font-size:1.4rem; color:white;'>{macro_label}</span><br>
+                <span style='color:#ccc; font-size:0.85rem;'>
+                Predicted price: {prix_predit:,.0f}€<br>
+                Actual price: {prix_input:,.0f}€<br>
+                Residual: {residu:,.0f}€
+                </span>
+            </div>""", unsafe_allow_html=True)
+
+        with col_r3:
+            both_suspicious = (stat_flag != "✅ Normal") and macro_flag
+            verdict_color = "#c0392b" if both_suspicious else "#27ae60"
+            verdict_label = "⚠️ HIGH PRIORITY — Suspicious" if both_suspicious else "✅ No major anomaly detected"
+            st.markdown(f"""
+            <div style='background:#1a3c5e; padding:16px; border-radius:12px; border-left: 6px solid {verdict_color};'>
+                <b style='color:#a8d4f5;'>Final verdict</b><br>
+                <span style='font-size:1.1rem; color:white; font-weight:bold;'>{verdict_label}</span><br>
+                <span style='color:#ccc; font-size:0.85rem;'>
+                Cluster {cluster_pred} — {CLUSTER_LABELS.get(cluster_pred, "")}<br>
+                Flagged by both methods: {"Yes" if both_suspicious else "No"}
+                </span>
+            </div>""", unsafe_allow_html=True)
+
+except Exception as e:
+    st.warning(f"Prediction models not found — upload kmeans_model.pkl, scaler.pkl, regression_model.pkl and stats_cluster.csv to your repo. ({e})")
+
 # ── Methodology note ───────────────────────────────────────────
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("""
