@@ -19,10 +19,13 @@ st.markdown("""
         border-radius: 12px;
         padding: 20px;
         text-align: center;
-        color: white;
+        color: white !important;
     }
-    .metric-value { font-size: 2.5rem; font-weight: bold; }
-    .metric-label { font-size: 0.9rem; opacity: 0.8; margin-top: 4px; }
+    .metric-value { font-size: 2.5rem; font-weight: bold; color: white !important; }
+    .metric-label { font-size: 0.9rem; opacity: 1; margin-top: 4px; color: #e0e0e0 !important; }
+    p, div, span, h1, h2, h3, h4, label { color: #f0f0f0 !important; }
+    .stSidebar { background-color: #0d1b2a !important; }
+    .stSidebar p, .stSidebar div, .stSidebar span, .stSidebar label { color: #e0e0e0 !important; }
     .cluster-badge {
         display: inline-block;
         padding: 4px 12px;
