@@ -48,7 +48,7 @@ st.markdown("""
         6,923 suspicious transactions detected across 317,413 Parisian property transactions (2014–2024)
     </p>
     <p style='color: #7ab3d4; margin: 4px 0 0 0; font-size: 0.85rem;'>
-        INSEEC Grande École — Group G3 | K-Means Clustering + Linear Regression
+        INSEEC Grande École — Group G3 | K-Means Clustering + Linear Regression with Interactions (R²=0.724)
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -125,6 +125,15 @@ CLUSTER_COLORS = {
     3: [155, 89, 182]
 }
 
+
+# ── Arrondissement mean income lookup ─────────────────────────
+ARR_INCOME = {
+    1: 52800, 2: 48200, 3: 46500, 4: 51000, 5: 54000,
+    6: 89000, 7: 112000, 8: 98000, 9: 58000, 10: 44000,
+    11: 42000, 12: 48000, 13: 43000, 14: 52000, 15: 58000,
+    16: 103000, 17: 62000, 18: 38000, 19: 36000, 20: 37000
+}
+
 ANOMALY_COLORS = {
     'Surcote':   [214, 39, 40],
     'Sous-cote': [44, 160, 44]
@@ -165,10 +174,14 @@ color_by = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📊 Model results")
-st.sidebar.markdown("**R² (regression):** 0.720")
-st.sidebar.markdown("**RMSE:** 217,510 €")
-st.sidebar.markdown("**Anomaly threshold:** 483,495 €")
+st.sidebar.markdown("**R² (with interactions):** 0.724")
+st.sidebar.markdown("**RMSE:** €216,115")
+st.sidebar.markdown("**MAE:** €121,184")
+st.sidebar.markdown("**Anomaly threshold:** €483,495")
 st.sidebar.markdown("**Total transactions:** 317,413")
+st.sidebar.markdown("**Mean price:** €508,409")
+st.sidebar.markdown("**Statistical anomalies:** 13,628 (4.29%)")
+st.sidebar.markdown("**Macro anomalies:** 12,895 (4.06%)")
 st.sidebar.markdown("**Flagged by both methods:** 6,923 (2.18%)")
 
 # ── Apply filters ──────────────────────────────────────────────
@@ -328,11 +341,17 @@ try:
 
     with col_f2:
         prix_input = st.number_input("Transaction price (€)", min_value=10000, max_value=20000000, value=400000, step=10000)
-        revenu = st.number_input("Avg household income of arrondissement (€)", min_value=10000, max_value=200000, value=50000, step=1000)
+        arrondissement = st.selectbox(
+            "Arrondissement",
+            options=list(range(1, 21)),
+            format_func=lambda x: f"{x}e arrondissement",
+            index=10
+        )
+        revenu = ARR_INCOME[arrondissement]
 
     with col_f3:
         taux = st.number_input("Interest rate (%)", min_value=0.5, max_value=6.0, value=3.5, step=0.1)
-        emprunts = st.number_input("New mortgage loans (M€)", min_value=1000, max_value=30000, value=12000, step=500)
+        vefa_input = st.radio("Property type", options=[0, 1], format_func=lambda x: "Old property" if x == 0 else "New build (VEFA)", horizontal=True)
 
     if st.button("🔍 Analyse this transaction", use_container_width=True):
 
@@ -361,11 +380,21 @@ try:
             stat_flag = "✅ Normal"
             stat_color = "#2e75b6"
 
-        # Regression prediction
-        features_reg = np.array([[surface, n_pieces, cluster_pred, revenu, taux, emprunts]])
+        # Regression prediction — with interaction terms (model_h)
+        vefa_encoded    = vefa_input
+        surface_x_cluster  = surface * cluster_pred
+        pieces_x_surface   = n_pieces * surface
+        taux_x_cluster     = taux * cluster_pred
+        vefa_x_cluster     = vefa_encoded * cluster_pred
+
+        features_reg = np.array([[
+            surface, n_pieces, cluster_pred, revenu, taux, 12000,  # fixed macro avg
+            surface_x_cluster, pieces_x_surface, taux_x_cluster,
+            vefa_encoded, vefa_x_cluster
+        ]])
         prix_predit = reg_loaded.predict(features_reg)[0]
         residu = abs(prix_input - prix_predit)
-        seuil_residu = 483495
+        seuil_residu = 483495  # mean + 2*sigma of absolute residuals
         macro_flag = residu > seuil_residu
 
         # Final verdict
@@ -379,6 +408,7 @@ try:
                 <span style='font-size:1.4rem; color:white;'>{stat_flag}</span><br>
                 <span style='color:#ccc; font-size:0.85rem;'>
                 Price/m²: {prix_m2_input:,.0f}€<br>
+                Arrondissement: {arrondissement}e — income ~€{revenu:,.0f}/yr<br>
                 Cluster mean: {mean_m2:,.0f}€/m²<br>
                 Normal range: {lower:,.0f} – {upper:,.0f}€/m²
                 </span>
@@ -423,7 +453,7 @@ st.markdown("""
     <p style='color:#ccc; margin:0; font-size:0.85rem;'>
     Transactions displayed are flagged simultaneously by <b style='color:white;'>two independent methods</b>: 
     (1) statistical deviation from cluster mean ± 2σ, and 
-    (2) large residual from linear regression incorporating macro-economic variables (R²=0.720). 
+    (2) large residual from linear regression incorporating macro-economic variables (R²=0.724). 
     Dataset: DVF — Demandes de Valeurs Foncières | 317,413 Parisian transactions | 2014–2024.
     </p>
 </div>
