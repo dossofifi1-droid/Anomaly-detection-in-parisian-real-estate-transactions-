@@ -327,11 +327,26 @@ st.markdown("Enter the characteristics of a property to check if its price is su
 
 try:
     import joblib
+    import gdown
+    import os
 
-    km_loaded    = joblib.load("kmeans_model.pkl")
-    scaler_loaded = joblib.load("scaler.pkl")
-    reg_loaded   = joblib.load("regression_model.pkl")
-    stats_loaded = pd.read_csv("stats_cluster.csv")
+    # Download models from Google Drive if not already cached
+    @st.cache_resource
+    def load_models():
+        if not os.path.exists("regression_model.pkl"):
+            gdown.download("https://drive.google.com/uc?id=1SGj-lK5ZLtpwtamxxYVcy8ISFzms0bFb", "regression_model.pkl", quiet=True)
+        if not os.path.exists("kmeans_model.pkl"):
+            gdown.download("https://drive.google.com/uc?id=1uYhfJWF7CoYZqz9liplaomQ0wK7UWN4g", "kmeans_model.pkl", quiet=True)
+        if not os.path.exists("scaler.pkl"):
+            gdown.download("https://drive.google.com/uc?id=1wlgU3VJAX0ysw5bj4KnO6wnz0IMprVdN", "scaler.pkl", quiet=True)
+        return (
+            joblib.load("kmeans_model.pkl"),
+            joblib.load("scaler.pkl"),
+            joblib.load("regression_model.pkl"),
+            pd.read_csv("stats_cluster.csv")
+        )
+
+    km_loaded, scaler_loaded, reg_loaded, stats_loaded = load_models()
 
     col_f1, col_f2, col_f3 = st.columns(3)
 
